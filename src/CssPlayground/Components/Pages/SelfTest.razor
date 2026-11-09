@@ -1,0 +1,78 @@
+@page "/selbsttest"
+@inject LessonCatalog Catalog
+@inject ProgressService Progress
+
+<PageTitle>Selbsttest – CSS-Werkstatt</PageTitle>
+
+<h1>Selbsttest der Lektionen</h1>
+<p>
+    Für Kursautorinnen und -autoren: Für jede Aufgabe wird geprüft, dass die <strong>Musterlösung alle Prüfungen besteht</strong>
+    und der <strong>Ausgangszustand mindestens eine Prüfung nicht besteht</strong>.
+</p>
+
+<button type="button" class="btn btn--primary" @onclick="RunAsync" disabled="@running">@(running ? "Läuft …" : "Selbsttest starten")</button>
+
+@if (rows.Count > 0)
+{
+    <p id="selftest-summary" class="@(rows.All(r => r.Ok) ? "success" : "error")">
+        @rows.Count(r => r.Ok) von @rows.Count Aufgaben in Ordnung.
+    </p>
+    <table class="selftest">
+        <thead><tr><th>Aufgabe</th><th>Lösung</th><th>Ausgangszustand</th></tr></thead>
+        <tbody>
+            @foreach (var row in rows)
+            {
+                <tr class="@(row.Ok ? "ok" : "fail")">
+                    <td>@row.Name</td>
+                    <td>@(row.SolutionOk ? "✓ besteht" : "✗ " + row.SolutionErrors)</td>
+                    <td>@(row.StarterFails ? "✓ schlägt fehl" : "✗ besteht bereits")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<iframe @ref="frame" class="selftest-frame" sandbox="allow-same-origin" title="Testrahmen"></iframe>
+
+@code {
+    private ElementReference frame;
+    private bool running;
+    private readonly List<Row> rows = [];
+
+    private async Task RunAsync()
+    {
+        running = true;
+        rows.Clear();
+        var module = await Progress.GetModuleAsync();
+
+        foreach (var lesson in Catalog.Lessons)
+        {
+            foreach (var ex in lesson.Exercises)
+            {
+                rows.Add(await EvaluateAsync(module, $"{lesson.Number}. {ex.Title} ({ex.Id})", ex.Html, ex.SolutionCss, ex.StarterCss, ex.Checks));
+            }
+            if (lesson.Project is { } project)
+            {
+                rows.Add(await EvaluateAsync(module, $"{lesson.Number}. Projekt ({project.Id})", CafeProject.Html,
+                    Catalog.ReferenceCssThrough(lesson), Catalog.ReferenceCssBefore(lesson), project.Checks));
+            }
+            StateHasChanged();
+        }
+        running = false;
+    }
+
+    private async Task<Row> EvaluateAsync(IJSObjectReference module, string name, string html, string solution, string starter, IReadOnlyList<Check> checks)
+    {
+        var sol = await module.InvokeAsync<Result[]>("evaluate", frame, html, solution, checks);
+        var start = await module.InvokeAsync<Result[]>("evaluate", frame, html, starter, checks);
+        var errors = string.Join(" | ", sol.Select((r, i) => (r, i)).Where(x => !x.r.Passed).Select(x => $"{checks[x.i].Description}: {x.r.Message}"));
+        return new Row(name, sol.All(r => r.Passed), start.Any(r => !r.Passed), errors);
+    }
+
+    private sealed record Result(bool Passed, string? Message);
+
+    private sealed record Row(string Name, bool SolutionOk, bool StarterFails, string SolutionErrors)
+    {
+        public bool Ok => SolutionOk && StarterFails;
+    }
+}

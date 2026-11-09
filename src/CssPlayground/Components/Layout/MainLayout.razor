@@ -1,0 +1,65 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject LessonCatalog Catalog
+@inject ProgressService Progress
+@inject NavigationManager Nav
+
+<div class="app">
+    <aside class="sidebar @(menuOpen ? "sidebar--open" : "")">
+        <div class="sidebar__top">
+            <a href="" class="brand">🎨 CSS-Werkstatt</a>
+            <button type="button" class="sidebar__toggle" @onclick="@(() => menuOpen = !menuOpen)" aria-label="Menü umschalten">☰</button>
+        </div>
+
+        <nav class="sidebar__nav" @onclick="@(() => menuOpen = false)">
+            <NavLink href="" Match="NavLinkMatch.All" class="sidebar__link">🏠 Übersicht</NavLink>
+
+            <div class="sidebar__heading">Lektionen</div>
+            @foreach (var lesson in Catalog.Lessons)
+            {
+                var done = Progress.CompletedCount(lesson);
+                var total = LessonCatalog.TaskIds(lesson).Count;
+                <NavLink href="@lesson.Url" class="sidebar__link sidebar__lesson">
+                    <span class="sidebar__num @(done == total ? "complete" : "")">@(done == total ? "✓" : lesson.Number.ToString())</span>
+                    <span class="sidebar__title">@lesson.Title</span>
+                    <span class="sidebar__count">@done/@total</span>
+                </NavLink>
+            }
+
+            <div class="sidebar__heading">Werkzeuge</div>
+            <NavLink href="projekt" class="sidebar__link">☕ Mein Café-Projekt</NavLink>
+            <NavLink href="spielwiese" class="sidebar__link">🧪 Spielwiese</NavLink>
+        </nav>
+
+        <div class="sidebar__progress">
+            <div class="progress"><div class="progress__bar" style="width: @(Percent)%"></div></div>
+            <small>@Progress.TotalCompleted von @Catalog.TotalTasks Aufgaben erledigt</small>
+        </div>
+    </aside>
+
+    <main class="content">
+        @Body
+    </main>
+</div>
+
+<div id="blazor-error-ui">
+    Es ist ein unerwarteter Fehler aufgetreten.
+    <a href="" class="reload">Neu laden</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+@code {
+    private bool menuOpen;
+
+    private int Percent => Catalog.TotalTasks == 0 ? 0 : (int)Math.Round(100.0 * Progress.TotalCompleted / Catalog.TotalTasks);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Progress.Changed += OnChanged;
+        await Progress.EnsureLoadedAsync();
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Progress.Changed -= OnChanged;
+}

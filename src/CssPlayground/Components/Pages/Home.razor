@@ -1,0 +1,99 @@
+@page "/"
+@implements IDisposable
+@inject LessonCatalog Catalog
+@inject ProgressService Progress
+
+<PageTitle>CSS-Werkstatt – CSS interaktiv lernen</PageTitle>
+
+<section class="home-hero">
+    <h1>CSS lernen – Schritt für Schritt</h1>
+    <p>
+        Willkommen in der CSS-Werkstatt! Hier lernst du CSS von Grund auf – direkt im Browser, mit Live-Vorschau.
+        Du solltest wissen, wie HTML-Elemente, Attribute und Klassen funktionieren; alles andere zeigen wir dir.
+    </p>
+    <div class="home-hero__actions">
+        <a class="btn btn--primary btn--large" href="@ContinueLesson.Url">
+            @(Progress.TotalCompleted == 0 ? "Jetzt starten" : "Weiterlernen") → @ContinueLesson.Number. @ContinueLesson.Title
+        </a>
+        <a class="btn btn--large" href="projekt">☕ Mein Café-Projekt ansehen</a>
+    </div>
+</section>
+
+<section class="how">
+    <div class="how__item">
+        <div class="how__icon">📖</div>
+        <h3>Verstehen</h3>
+        <p>Jede Lektion erklärt ein Thema mit kurzen Texten und Beispielen, die du sofort verändern kannst.</p>
+    </div>
+    <div class="how__item">
+        <div class="how__icon">✎</div>
+        <h3>Üben</h3>
+        <p>Übungen werden automatisch geprüft. Du siehst genau, was schon passt und was noch fehlt.</p>
+    </div>
+    <div class="how__item">
+        <div class="how__icon">☕</div>
+        <h3>Bauen</h3>
+        <p>In jeder Lektion gestaltest du ein Stück der Webseite des „Café Kaffeebohne“ – bis sie am Ende fertig ist.</p>
+    </div>
+</section>
+
+<h2>Alle Lektionen</h2>
+<div class="lesson-grid">
+    @foreach (var lesson in Catalog.Lessons)
+    {
+        var done = Progress.CompletedCount(lesson);
+        var total = LessonCatalog.TaskIds(lesson).Count;
+        <a class="lesson-card @(done == total ? "lesson-card--done" : "")" href="@lesson.Url">
+            <span class="lesson-card__num">@lesson.Number</span>
+            <span class="lesson-card__body">
+                <strong>@lesson.Title</strong>
+                <span>@lesson.Summary</span>
+                <span class="lesson-card__progress">
+                    <span class="progress"><span class="progress__bar" style="width: @(total == 0 ? 0 : 100 * done / total)%"></span></span>
+                    <small>@done/@total</small>
+                </span>
+            </span>
+        </a>
+    }
+</div>
+
+<section class="home-footer">
+    <p class="muted small">
+        Dein Fortschritt und dein Code werden nur lokal in diesem Browser gespeichert.
+        @if (confirmReset)
+        {
+            <span>Wirklich alles löschen?
+                <button type="button" class="btn btn--small" @onclick="ResetAsync">Ja, zurücksetzen</button>
+                <button type="button" class="btn btn--small btn--ghost" @onclick="@(() => confirmReset = false)">Abbrechen</button>
+            </span>
+        }
+        else
+        {
+            <button type="button" class="btn btn--small btn--ghost" @onclick="@(() => confirmReset = true)">Fortschritt zurücksetzen</button>
+        }
+        · <a href="selbsttest">Selbsttest der Lektionen</a>
+    </p>
+</section>
+
+@code {
+    private bool confirmReset;
+
+    private Lesson ContinueLesson =>
+        Catalog.Lessons.FirstOrDefault(l => !Progress.IsLessonCompleted(l)) ?? Catalog.Lessons[^1];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Progress.Changed += OnChanged;
+        await Progress.EnsureLoadedAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        confirmReset = false;
+        await Progress.ResetAllAsync();
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Progress.Changed -= OnChanged;
+}

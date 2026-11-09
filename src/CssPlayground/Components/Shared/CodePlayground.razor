@@ -1,0 +1,217 @@
+@implements IAsyncDisposable
+@inject ProgressService Progress
+
+<div class="playground @(UseTabs ? "playground--tabs" : "") @(passed ? "playground--passed" : "")">
+    <div class="playground__editors">
+        @if (UseTabs)
+        {
+            <div class="playground__tabs" role="tablist">
+                <button type="button" role="tab" class="@(activeTab == "css" ? "active" : "")" @onclick="@(() => activeTab = "css")">CSS</button>
+                <button type="button" role="tab" class="@(activeTab == "html" ? "active" : "")" @onclick="@(() => activeTab = "html")">
+                    HTML @(HtmlReadOnly ? "(nur lesen)" : "")
+                </button>
+            </div>
+        }
+
+        <div class="editor @(UseTabs && activeTab != "html" ? "hidden" : "")">
+            @if (!UseTabs)
+            {
+                <div class="editor__label">HTML @(HtmlReadOnly ? "(nur lesen)" : "")</div>
+            }
+            <textarea @ref="htmlRef" class="editor__area editor__area--html" spellcheck="false" autocomplete="off"
+                      readonly="@HtmlReadOnly" rows="@HtmlRows" aria-label="HTML-Code"></textarea>
+        </div>
+
+        <div class="editor @(UseTabs && activeTab != "css" ? "hidden" : "")">
+            @if (!UseTabs)
+            {
+                <div class="editor__label">CSS</div>
+            }
+            <textarea @ref="cssRef" class="editor__area editor__area--css" spellcheck="false" autocomplete="off"
+                      rows="@CssRows" aria-label="CSS-Code"></textarea>
+        </div>
+
+        <div class="playground__actions">
+            @if (Checks is { Count: > 0 })
+            {
+                <button type="button" class="btn btn--primary" @onclick="RunChecksAsync">✔ Prüfen</button>
+            }
+            <button type="button" class="btn" @onclick="ResetAsync" title="Auf den Ausgangszustand zurücksetzen">↺ Zurücksetzen</button>
+            @if (!string.IsNullOrEmpty(ReferenceCss))
+            {
+                <button type="button" class="btn" @onclick="LoadReferenceAsync" title="@ReferenceTitle">@ReferenceLabel</button>
+            }
+            @if (!string.IsNullOrEmpty(Hint))
+            {
+                <button type="button" class="btn btn--ghost" @onclick="@(() => showHint = !showHint)">💡 Tipp</button>
+            }
+            @if (!string.IsNullOrEmpty(SolutionCss))
+            {
+                <button type="button" class="btn btn--ghost" @onclick="ShowSolutionAsync">👀 Lösung</button>
+            }
+        </div>
+
+        @if (restored)
+        {
+            <p class="playground__note">Dein gespeicherter Stand wurde geladen.</p>
+        }
+        @if (showHint && !string.IsNullOrEmpty(Hint))
+        {
+            <div class="tip">@Hint</div>
+        }
+        @if (solutionRequested)
+        {
+            <div class="tip tip--warn">
+                Möchtest du die Lösung wirklich laden? Dein aktueller Code wird ersetzt.
+                <button type="button" class="btn btn--small" @onclick="ConfirmSolutionAsync">Ja, Lösung laden</button>
+                <button type="button" class="btn btn--small btn--ghost" @onclick="@(() => solutionRequested = false)">Abbrechen</button>
+            </div>
+        }
+
+        @if (results is not null && Checks is not null)
+        {
+            <ul class="checks" aria-live="polite">
+                @for (var i = 0; i < Checks.Count; i++)
+                {
+                    var r = i < results.Length ? results[i] : null;
+                    var ok = r?.Passed == true;
+                    <li class="@(ok ? "ok" : "fail")">
+                        <span class="checks__icon">@(ok ? "✓" : "✗")</span>
+                        <span>
+                            @Checks[i].Description
+                            @if (!ok && !string.IsNullOrEmpty(r?.Message))
+                            {
+                                <small>@r!.Message</small>
+                            }
+                        </span>
+                    </li>
+                }
+            </ul>
+            @if (passed)
+            {
+                <p class="success">🎉 Super, alles richtig!</p>
+            }
+        }
+    </div>
+
+    <div class="playground__preview">
+        <div class="preview__bar">
+            <span>Vorschau</span>
+            @if (ShowWidthSwitcher)
+            {
+                <span class="preview__widths">
+                    <button type="button" class="@(previewWidth == 0 ? "active" : "")" title="Volle Breite" @onclick="@(() => SetWidthAsync(0))">💻</button>
+                    <button type="button" class="@(previewWidth == 768 ? "active" : "")" title="Tablet (768px)" @onclick="@(() => SetWidthAsync(768))">📟</button>
+                    <button type="button" class="@(previewWidth == 375 ? "active" : "")" title="Smartphone (375px)" @onclick="@(() => SetWidthAsync(375))">📱</button>
+                </span>
+            }
+        </div>
+        <div class="preview__frame-wrap" style="height: @(PreviewHeight)px">
+            <iframe @ref="frameRef" class="preview__frame" sandbox="allow-same-origin" title="Vorschau"></iframe>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Html { get; set; } = "";
+    [Parameter, EditorRequired] public string Css { get; set; } = "";
+    [Parameter] public bool HtmlReadOnly { get; set; }
+    [Parameter] public bool UseTabs { get; set; }
+    [Parameter] public IReadOnlyList<Check>? Checks { get; set; }
+    [Parameter] public string? SolutionCss { get; set; }
+    [Parameter] public string? Hint { get; set; }
+
+    /// <summary>Schlüssel, unter dem der Code im Browser gespeichert wird. Ohne Schlüssel keine Speicherung.</summary>
+    [Parameter] public string? DraftKey { get; set; }
+
+    [Parameter] public int PreviewHeight { get; set; } = 240;
+    [Parameter] public bool ShowWidthSwitcher { get; set; }
+    [Parameter] public EventCallback OnPassed { get; set; }
+
+    /// <summary>Optionaler zusätzlicher CSS-Stand (z. B. Musterlösung des vorherigen Projektschritts).</summary>
+    [Parameter] public string? ReferenceCss { get; set; }
+    [Parameter] public string ReferenceLabel { get; set; } = "Musterstand laden";
+    [Parameter] public string? ReferenceTitle { get; set; }
+
+    private ElementReference htmlRef, cssRef, frameRef;
+    private IJSObjectReference? module;
+    private int instanceId;
+    private string activeTab = "css";
+    private bool restored, showHint, solutionRequested, passed;
+    private int previewWidth;
+    private CheckResult[]? results;
+
+    private int HtmlRows => UseTabs ? 24 : Math.Clamp(LineCount(Html) + 1, 3, HtmlReadOnly ? 14 : 18);
+    private int CssRows => UseTabs ? 24 : Math.Clamp(LineCount(Css) + 2, 5, 26);
+
+    private static int LineCount(string s) => s.Split('\n').Length;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        module = await Progress.GetModuleAsync();
+        var mounted = await module.InvokeAsync<MountResult>("mount", htmlRef, cssRef, frameRef,
+            new { html = Html, css = Css, draftKey = DraftKey });
+        instanceId = mounted.Id;
+        if (mounted.Restored)
+        {
+            restored = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RunChecksAsync()
+    {
+        if (module is null || Checks is null) return;
+        results = await module.InvokeAsync<CheckResult[]>("check", instanceId, Checks);
+        var allPassed = results.Length == Checks.Count && results.All(r => r.Passed);
+        passed = allPassed;
+        if (allPassed) await OnPassed.InvokeAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        if (module is null) return;
+        await module.InvokeVoidAsync("setCode", instanceId, Html, Css, true);
+        results = null;
+        passed = false;
+        restored = false;
+    }
+
+    private async Task LoadReferenceAsync()
+    {
+        if (module is null || ReferenceCss is null) return;
+        await module.InvokeVoidAsync("setCode", instanceId, null, ReferenceCss, false);
+        results = null;
+        passed = false;
+    }
+
+    private void ShowSolutionAsync() => solutionRequested = true;
+
+    private async Task ConfirmSolutionAsync()
+    {
+        solutionRequested = false;
+        if (module is null || SolutionCss is null) return;
+        await module.InvokeVoidAsync("setCode", instanceId, null, SolutionCss, false);
+        results = null;
+        passed = false;
+    }
+
+    private async Task SetWidthAsync(int width)
+    {
+        previewWidth = width;
+        if (module is not null) await module.InvokeVoidAsync("setPreviewWidth", instanceId, width);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null) return;
+        try { await module.InvokeVoidAsync("dispose", instanceId); }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+    }
+
+    private sealed record MountResult(int Id, bool Restored);
+
+    private sealed record CheckResult(bool Passed, string? Message);
+}

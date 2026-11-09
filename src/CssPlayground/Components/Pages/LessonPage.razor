@@ -1,0 +1,149 @@
+@page "/lektion/{Id}"
+@implements IDisposable
+@inject LessonCatalog Catalog
+@inject ProgressService Progress
+
+@if (lesson is null)
+{
+    <PageTitle>Lektion nicht gefunden – CSS-Werkstatt</PageTitle>
+    <h1>Lektion nicht gefunden</h1>
+    <p><a href="">Zurück zur Übersicht</a></p>
+}
+else
+{
+    <PageTitle>@lesson.Number. @lesson.Title – CSS-Werkstatt</PageTitle>
+
+    <article class="lesson" @key="lesson.Id">
+        <header class="lesson__header">
+            <div class="lesson__number">Lektion @lesson.Number von @Catalog.Lessons.Count</div>
+            <h1>@lesson.Title</h1>
+            <p class="lesson__summary">@lesson.Summary</p>
+            @if (lesson.Goals.Count > 0)
+            {
+                <div class="goals">
+                    <strong>Das lernst du:</strong>
+                    <ul>
+                        @foreach (var goal in lesson.Goals)
+                        {
+                            <li>@goal</li>
+                        }
+                    </ul>
+                </div>
+            }
+        </header>
+
+        @foreach (var sec in lesson.Sections)
+        {
+            <section class="lesson__section">
+                <h2>@sec.Title</h2>
+                <div class="prose">@((MarkupString)sec.Body)</div>
+                @if (sec.Example is { } example)
+                {
+                    <div class="example-label">▶ Probier's aus</div>
+                    <CodePlayground Html="@example.Html" Css="@example.Css" PreviewHeight="@example.PreviewHeight"
+                                    ShowWidthSwitcher="@(lesson.Id == "responsive")" />
+                }
+            </section>
+        }
+
+        @if (lesson.Exercises.Count > 0)
+        {
+            <section class="lesson__section">
+                <h2>Übungen</h2>
+                @foreach (var exercise in lesson.Exercises)
+                {
+                    var done = Progress.IsCompleted(exercise.Id);
+                    <div class="task-card @(done ? "task-card--done" : "")">
+                        <h3>
+                            <span class="task-card__status">@(done ? "✓" : "✎")</span>
+                            Übung: @exercise.Title
+                        </h3>
+                        <div class="prose">@((MarkupString)exercise.Task)</div>
+                        <CodePlayground Html="@exercise.Html" Css="@exercise.StarterCss" HtmlReadOnly="true"
+                                        Checks="@exercise.Checks" SolutionCss="@exercise.SolutionCss" Hint="@exercise.Hint"
+                                        DraftKey="@exercise.Id" PreviewHeight="@exercise.PreviewHeight"
+                                        ShowWidthSwitcher="@(lesson.Id == "responsive")"
+                                        OnPassed="@(() => Progress.MarkCompletedAsync(exercise.Id))" />
+                    </div>
+                }
+            </section>
+        }
+
+        @if (lesson.Project is { } project)
+        {
+            var done = Progress.IsCompleted(project.Id);
+            <section class="lesson__section">
+                <h2>☕ Projekt: Café Kaffeebohne</h2>
+                <div class="task-card task-card--project @(done ? "task-card--done" : "")">
+                    <h3>
+                        <span class="task-card__status">@(done ? "✓" : "✎")</span>
+                        Projektschritt @lesson.Number
+                    </h3>
+                    <div class="prose">@((MarkupString)project.Task)</div>
+                    @if (projectStarter is null)
+                    {
+                        <p class="muted">Projekt wird geladen …</p>
+                    }
+                    else
+                    {
+                        <CodePlayground Html="@CafeProject.Html" Css="@projectStarter" HtmlReadOnly="true" UseTabs="true"
+                                        Checks="@project.Checks" Hint="@project.Hint"
+                                        SolutionCss="@Catalog.ReferenceCssThrough(lesson)"
+                                        ReferenceCss="@(lesson.Number > 1 ? Catalog.ReferenceCssBefore(lesson) : null)"
+                                        ReferenceLabel="Musterstand laden"
+                                        ReferenceTitle="Lädt die Musterlösung aller bisherigen Projektschritte – praktisch, wenn dein eigener Stand nicht mehr passt."
+                                        DraftKey="@project.Id" PreviewHeight="560" ShowWidthSwitcher="true"
+                                        OnPassed="@(() => Progress.MarkCompletedAsync(project.Id))" />
+                        <p class="muted small">
+                            Dein Projekt-CSS wird automatisch gespeichert und ist der Ausgangspunkt für den nächsten Projektschritt.
+                            <a href="projekt">Gesamtansicht öffnen</a>
+                        </p>
+                    }
+                </div>
+            </section>
+        }
+
+        <nav class="lesson__nav">
+            @if (Catalog.Previous(lesson) is { } prev)
+            {
+                <a class="btn" href="@prev.Url">← @prev.Number. @prev.Title</a>
+            }
+            else
+            {
+                <span></span>
+            }
+            @if (Catalog.Next(lesson) is { } next)
+            {
+                <a class="btn btn--primary" href="@next.Url">@next.Number. @next.Title →</a>
+            }
+            else
+            {
+                <a class="btn btn--primary" href="projekt">🎉 Zum fertigen Projekt</a>
+            }
+        </nav>
+    </article>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private Lesson? lesson;
+    private string? projectStarter;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        lesson = Catalog.Find(Id);
+        projectStarter = null;
+        await Progress.EnsureLoadedAsync();
+        if (lesson?.Project is not null)
+        {
+            projectStarter = await Progress.GetProjectStarterAsync(lesson);
+        }
+    }
+
+    protected override void OnInitialized() => Progress.Changed += OnProgressChanged;
+
+    private void OnProgressChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Progress.Changed -= OnProgressChanged;
+}

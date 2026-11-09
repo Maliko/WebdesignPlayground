@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{530809B4-82A2-45A5-9CCE-61CA8850D66E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CssPlayground", "src\CssPlayground\CssPlayground.csproj", "{5810519C-5A70-4C87-B641-94599DB56F71}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{EFAC7A10-B639-417B-AB04-6C3400C051AC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CssPlayground.Tests", "tests\CssPlayground.Tests\CssPlayground.Tests.csproj", "{2CCE292B-2EB1-4068-8AF2-426820ED36EB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5810519C-5A70-4C87-B641-94599DB56F71}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5810519C-5A70-4C87-B641-94599DB56F71}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5810519C-5A70-4C87-B641-94599DB56F71}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5810519C-5A70-4C87-B641-94599DB56F71}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2CCE292B-2EB1-4068-8AF2-426820ED36EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2CCE292B-2EB1-4068-8AF2-426820ED36EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2CCE292B-2EB1-4068-8AF2-426820ED36EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2CCE292B-2EB1-4068-8AF2-426820ED36EB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{5810519C-5A70-4C87-B641-94599DB56F71} = {530809B4-82A2-45A5-9CCE-61CA8850D66E}
+		{2CCE292B-2EB1-4068-8AF2-426820ED36EB} = {EFAC7A10-B639-417B-AB04-6C3400C051AC}
+	EndGlobalSection
+EndGlobal

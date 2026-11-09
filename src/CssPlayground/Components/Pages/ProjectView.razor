@@ -1,0 +1,98 @@
+@page "/projekt"
+@inject LessonCatalog Catalog
+@inject ProgressService Progress
+
+<PageTitle>Mein Café-Projekt – CSS-Werkstatt</PageTitle>
+
+<h1>☕ Mein Café-Projekt</h1>
+
+@if (loading)
+{
+    <p class="muted">Wird geladen …</p>
+}
+else
+{
+    <p>
+        @if (ownStep is null)
+        {
+            <span>Du hast noch keinen Projektschritt bearbeitet. Starte in <a href="@Catalog.Lessons[0].Url">Lektion 1</a> – so sieht die Seite ohne CSS aus.</span>
+        }
+        else
+        {
+            <span>Dein Stand nach <strong>Lektion @ownLesson!.Number: @ownLesson.Title</strong>.</span>
+        }
+    </p>
+
+    <div class="project-toolbar">
+        <div class="segmented">
+            <button type="button" class="@(mode == "own" ? "active" : "")" @onclick="@(() => ShowAsync("own"))">Mein Stand</button>
+            <button type="button" class="@(mode == "reference" ? "active" : "")" @onclick="@(() => ShowAsync("reference"))">Fertige Musterlösung</button>
+        </div>
+        <div class="segmented">
+            <button type="button" class="@(width == 0 ? "active" : "")" @onclick="@(() => SetWidth(0))">💻 Desktop</button>
+            <button type="button" class="@(width == 768 ? "active" : "")" @onclick="@(() => SetWidth(768))">📟 Tablet</button>
+            <button type="button" class="@(width == 375 ? "active" : "")" @onclick="@(() => SetWidth(375))">📱 Smartphone</button>
+        </div>
+        <button type="button" class="btn" @onclick="DownloadAsync">⬇ Als HTML-Datei herunterladen</button>
+    </div>
+}
+
+<div class="project-frame">
+    <iframe @ref="frame" sandbox="allow-same-origin" title="Café-Webseite" style="width: @(width == 0 ? "100%" : width + "px")"></iframe>
+</div>
+
+@if (!loading && mode == "reference")
+{
+    <details class="code-details">
+        <summary>CSS der Musterlösung anzeigen</summary>
+        <pre><code>@currentCss</code></pre>
+    </details>
+}
+
+@code {
+    private ElementReference frame;
+    private bool loading = true;
+    private string mode = "own";
+    private int width;
+    private string currentCss = "";
+    private ProjectStep? ownStep;
+    private Lesson? ownLesson;
+    private string ownCss = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await Progress.EnsureLoadedAsync();
+        foreach (var lesson in Catalog.Lessons.Reverse())
+        {
+            if (lesson.Project is null) continue;
+            var draft = await Progress.GetProjectDraftAsync(lesson.Project);
+            if (draft is not null)
+            {
+                ownStep = lesson.Project;
+                ownLesson = lesson;
+                ownCss = draft;
+                break;
+            }
+        }
+        loading = false;
+        await ShowAsync("own");
+        StateHasChanged();
+    }
+
+    private async Task ShowAsync(string newMode)
+    {
+        mode = newMode;
+        currentCss = mode == "own" ? ownCss : Catalog.ReferenceCssThrough(Catalog.Lessons[^1]);
+        var module = await Progress.GetModuleAsync();
+        await module.InvokeVoidAsync("renderStatic", frame, CafeProject.Html, currentCss);
+    }
+
+    private void SetWidth(int w) => width = w;
+
+    private async Task DownloadAsync()
+    {
+        var module = await Progress.GetModuleAsync();
+        await module.InvokeVoidAsync("downloadPage", "cafe-kaffeebohne.html", "Café Kaffeebohne", CafeProject.Html, currentCss);
+    }
+}
